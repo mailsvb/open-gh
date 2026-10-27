@@ -2,7 +2,6 @@
 set -e
 
 INSTALL_DIR="/usr/local/bin"
-CONFIG_DIR="$HOME/.ghbar"
 BINARY_NAME="ghbar"
 PLIST_NAME="com.ghbar.app"
 PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
@@ -11,27 +10,8 @@ echo "Building GHBar..."
 swift build -c release --quiet
 
 echo "Installing to $INSTALL_DIR/$BINARY_NAME..."
+sudo mkdir -p "$INSTALL_DIR"
 sudo cp -f .build/release/GHBar "$INSTALL_DIR/$BINARY_NAME"
-
-# Create default config if missing
-if [ ! -f "$CONFIG_DIR/config.json" ]; then
-  mkdir -p "$CONFIG_DIR"
-  cat > "$CONFIG_DIR/config.json" <<'EOF'
-{
-  "activeRepoRunsLimit": 25,
-  "includePersonal": true,
-  "maxConcurrency": 8,
-  "maxReposPerOrg": 25,
-  "orgs": ["parsio-ai"],
-  "pollingIntervalSeconds": 15,
-  "runsPerRepo": 8,
-  "username": "XavierJp"
-}
-EOF
-  echo "Created default config at $CONFIG_DIR/config.json"
-else
-  echo "Config already exists at $CONFIG_DIR/config.json"
-fi
 
 # Install Launch Agent (start on login)
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -64,5 +44,6 @@ launchctl unload "$PLIST_PATH" 2>/dev/null || true
 launchctl load "$PLIST_PATH"
 
 echo "Done. GHBar is running and will start automatically on login."
+echo "  Config:  ~/.ghbar/config.json (created on first run)"
 echo "  Stop:    launchctl unload $PLIST_PATH"
 echo "  Restart: launchctl unload $PLIST_PATH && launchctl load $PLIST_PATH"

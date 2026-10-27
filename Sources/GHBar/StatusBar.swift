@@ -31,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
       popover.performClose(nil)
     } else {
       popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-      NSApp.activate(ignoringOtherApps: true)
+      NSApp.activate()
       appState.popoverOpened()
     }
   }
@@ -43,14 +43,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
   }
 
-  /// Draws the Lucide `git-pull-request-arrow` icon as an 18x18 NSImage, label color.
+  /// Draws the Lucide `git-pull-request-arrow` icon as an 18x18 template NSImage.
   private func makePRIcon() -> NSImage {
     let size = NSSize(width: 18, height: 18)
     let image = NSImage(size: size, flipped: false) { rect in
       let scale: CGFloat = 18.0 / 24.0
 
-      // Always use label color (black in light mode, white in dark mode)
-      NSColor.labelColor.setStroke()
+      // Template image: drawn in black, macOS tints it for light/dark and highlight
+      NSColor.black.setStroke()
 
       let strokeWidth: CGFloat = 2.0 * scale
       let lineJoin: NSBezierPath.LineJoinStyle = .round
@@ -125,6 +125,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
       return true
     }
+    image.isTemplate = true
 
     return image
   }

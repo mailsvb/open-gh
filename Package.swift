@@ -7,8 +7,7 @@ let package = Package(
   targets: [
     .executableTarget(
       name: "GHBar",
-      path: "Sources/GHBar",
-      swiftSettings: [.enableUpcomingFeature("BareSlashRegexLiterals")]
+      path: "Sources/GHBar"
     )
   ]
 )

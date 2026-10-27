@@ -3,17 +3,18 @@ import SwiftUI
 
 // MARK: - gh CLI JSON models
 
-struct GHRun: Codable {
+struct GHRun: Codable, Sendable {
+  let databaseId: Int
   let workflowName: String
-  let status: String          // "completed", "in_progress", "queued", "waiting"
-  let conclusion: String?     // "success", "failure", "cancelled", "skipped", null
+  let status: String          // "completed", "in_progress", "queued", "waiting", "requested", "pending"
+  let conclusion: String?     // "success", "failure", "cancelled", "skipped", "timed_out", ... or ""
   let headBranch: String
   let startedAt: Date
   let updatedAt: Date
   let url: String
 }
 
-struct GHPullRequest: Codable {
+struct GHPullRequest: Codable, Sendable {
   let number: Int
   let title: String
   let url: String
@@ -23,10 +24,43 @@ struct GHPullRequest: Codable {
   let statusCheckRollup: [GHStatusCheck]
 }
 
-struct GHStatusCheck: Codable {
-  let name: String
-  let status: String
-  let conclusion: String
+/// An entry of `statusCheckRollup`: either a CheckRun (name/status/conclusion)
+/// or a commit StatusContext (context/state). gh reports both in UPPERCASE.
+struct GHStatusCheck: Codable, Sendable {
+  let name: String?
+  let status: String?
+  let conclusion: String?
+  let context: String?
+  let state: String?
+
+  var outcome: RunStatus {
+    if let state {
+      switch state.uppercased() {
+      case "SUCCESS":             return .success
+      case "FAILURE", "ERROR":    return .failure
+      case "PENDING", "EXPECTED": return .inProgress
+      default:                    return .unknown
+      }
+    }
+    if let status, status.uppercased() != "COMPLETED" { return .inProgress }
+    switch conclusion?.uppercased() {
+    case "SUCCESS", "NEUTRAL", "SKIPPED":
+      return .success
+    case "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE":
+      return .failure
+    default:
+      return .unknown
+    }
+  }
+}
+
+struct GHRepo: Codable, Sendable {
+  let nameWithOwner: String
+}
+
+/// Result of `gh search prs --json repository`.
+struct GHSearchPR: Codable, Sendable {
+  let repository: GHRepo
 }
 
 // MARK: - App view models
@@ -48,18 +82,18 @@ struct WorkflowGroup: Identifiable {
 }
 
 struct WorkflowStats {
-  let successRate: Int        // 0-100
+  let successRate: Int?       // 0-100, nil when no run has completed yet
   let totalRuns: Int
   let avgDuration: String     // e.g. "2m 15s"
   let failCount: Int
 }
 
 struct RunViewModel: Identifiable {
-  let id: String
+  let id: Int                 // gh databaseId
   let branch: String
   let status: RunStatus
   let duration: String
-  let timeAgo: String
+  let updatedAt: Date
   let url: URL?
 }
 
@@ -102,7 +136,7 @@ struct PRViewModel: Identifiable {
   let branch: String
   let reviewStatus: ReviewStatus
   let checksStatus: RunStatus
-  let timeAgo: String
+  let updatedAt: Date
   let url: URL?
 }
 
@@ -146,13 +180,17 @@ func parseRunStatus(status: String, conclusion: String?) -> RunStatus {
   switch status {
   case "completed":
     switch conclusion {
-    case "success":   return .success
-    case "failure":   return .failure
-    case "cancelled": return .cancelled
-    default:          return .unknown
+    case "success":
+      return .success
+    case "failure", "timed_out", "startup_failure", "action_required":
+      return .failure
+    case "cancelled", "skipped", "neutral", "stale":
+      return .cancelled
+    default:
+      return .unknown
     }
   case "in_progress": return .inProgress
-  case "queued", "waiting": return .queued
+  case "queued", "waiting", "requested", "pending": return .queued
   default: return .unknown
   }
 }
@@ -166,16 +204,22 @@ func parseReviewStatus(_ raw: String) -> ReviewStatus {
   }
 }
 
-func checksOverallStatus(_ checks: [GHStatusCheck]) -> RunStatus {
-  if checks.isEmpty { return .unknown }
-  if checks.contains(where: { $0.conclusion == "failure" }) { return .failure }
-  if checks.contains(where: { $0.status == "in_progress" || $0.status == "queued" }) { return .inProgress }
-  if checks.allSatisfy({ $0.conclusion == "success" }) { return .success }
+/// Worst status wins: failure > in progress > queued > all success > unknown.
+func combinedStatus(_ statuses: [RunStatus]) -> RunStatus {
+  if statuses.isEmpty { return .unknown }
+  if statuses.contains(.failure) { return .failure }
+  if statuses.contains(.inProgress) { return .inProgress }
+  if statuses.contains(.queued) { return .queued }
+  if statuses.allSatisfy({ $0 == .success }) { return .success }
   return .unknown
 }
 
-func relativeTime(from date: Date) -> String {
-  let seconds = Int(Date().timeIntervalSince(date))
+func checksOverallStatus(_ checks: [GHStatusCheck]) -> RunStatus {
+  combinedStatus(checks.map(\.outcome))
+}
+
+func relativeTime(from date: Date, now: Date = Date()) -> String {
+  let seconds = Int(now.timeIntervalSince(date))
   if seconds < 0 { return "just now" }
   if seconds < 60 { return "\(seconds)s ago" }
   let minutes = seconds / 60
@@ -196,8 +240,7 @@ func formatTime(_ date: Date) -> String {
   timeFormatter.string(from: date)
 }
 
-func formatDuration(from start: Date, to end: Date) -> String {
-  let seconds = Int(end.timeIntervalSince(start))
+func formatDuration(seconds: Int) -> String {
   if seconds < 0 { return "-" }
   if seconds < 60 { return "\(seconds)s" }
   let minutes = seconds / 60
@@ -208,25 +251,23 @@ func formatDuration(from start: Date, to end: Date) -> String {
   return "\(hours)h \(mins)m"
 }
 
+func formatDuration(from start: Date, to end: Date) -> String {
+  formatDuration(seconds: Int(end.timeIntervalSince(start)))
+}
+
 func computeWorkflowStats(runs: [GHRun]) -> WorkflowStats {
   let completed = runs.filter { $0.status == "completed" }
   let successes = completed.filter { $0.conclusion == "success" }.count
-  let failures = completed.filter { $0.conclusion == "failure" }.count
-  let rate = completed.isEmpty ? 0 : Int(Double(successes) / Double(completed.count) * 100)
+  let failures = completed.filter { parseRunStatus(status: $0.status, conclusion: $0.conclusion) == .failure }.count
+  let rate = completed.isEmpty ? nil : Int((Double(successes) / Double(completed.count) * 100).rounded())
 
   let durations = completed.map { $0.updatedAt.timeIntervalSince($0.startedAt) }.filter { $0 > 0 }
   let avgSecs = durations.isEmpty ? 0 : Int(durations.reduce(0, +) / Double(durations.count))
-  let avgStr: String
-  if avgSecs < 60 {
-    avgStr = "\(avgSecs)s"
-  } else {
-    avgStr = "\(avgSecs / 60)m \(avgSecs % 60)s"
-  }
 
   return WorkflowStats(
     successRate: rate,
     totalRuns: runs.count,
-    avgDuration: avgStr,
+    avgDuration: formatDuration(seconds: avgSecs),
     failCount: failures
   )
 }

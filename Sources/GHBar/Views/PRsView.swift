@@ -38,7 +38,7 @@ struct PRsView: View {
   }
 
   private func prRow(pr: PRViewModel) -> some View {
-    Button(action: { openURL(pr.url) }) {
+    Button(action: { openInBrowser(pr.url) }) {
       VStack(alignment: .leading, spacing: 3) {
         HStack(spacing: 6) {
           Text("#\(pr.number)")
@@ -48,7 +48,7 @@ struct PRsView: View {
             .font(.system(size: 13))
             .lineLimit(1)
           Spacer()
-          Text(pr.timeAgo)
+          RelativeTimeText(date: pr.updatedAt)
             .font(.system(size: 11))
             .foregroundStyle(.tertiary)
         }
@@ -87,13 +87,7 @@ struct PRsView: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .onHover { hovering in
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
-    }
+    .pointingHandCursor()
   }
 
   private var emptyState: some View {
@@ -108,10 +102,5 @@ struct PRsView: View {
       Spacer()
     }
     .frame(maxWidth: .infinity)
-  }
-
-  private func openURL(_ url: URL?) {
-    guard let url else { return }
-    NSWorkspace.shared.open(url)
   }
 }

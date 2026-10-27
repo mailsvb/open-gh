@@ -71,8 +71,7 @@ private struct RepoDisclosure: View {
   }
 
   private var repoStatusBadge: some View {
-    let allStatuses = repo.workflows.flatMap { $0.runs }.map(\.status)
-    let worst = worstStatus(allStatuses)
+    let worst = combinedStatus(repo.workflows.flatMap { $0.runs }.map(\.status))
     return Image(systemName: worst.symbol)
       .font(.system(size: 12))
       .foregroundColor(worst.color)
@@ -100,9 +99,15 @@ private struct RepoDisclosure: View {
 
   private func statsLabel(_ stats: WorkflowStats) -> some View {
     HStack(spacing: 6) {
-      Text("\(stats.successRate)%")
-        .font(.system(size: 12, weight: .medium, design: .monospaced))
-        .foregroundColor(stats.successRate >= 80 ? .green : stats.successRate >= 50 ? .orange : .red)
+      if let rate = stats.successRate {
+        Text("\(rate)%")
+          .font(.system(size: 12, weight: .medium, design: .monospaced))
+          .foregroundColor(rate >= 80 ? .green : rate >= 50 ? .orange : .red)
+      } else {
+        Text("–")
+          .font(.system(size: 12, weight: .medium, design: .monospaced))
+          .foregroundStyle(.tertiary)
+      }
 
       HStack(spacing: 2) {
         Image(systemName: "clock")
@@ -125,7 +130,7 @@ private struct RepoDisclosure: View {
   }
 
   private func runRow(run: RunViewModel) -> some View {
-    Button(action: { openURL(run.url) }) {
+    Button(action: { openInBrowser(run.url) }) {
       HStack(spacing: 6) {
         Image(systemName: run.status.symbol)
           .font(.system(size: 11))
@@ -137,7 +142,7 @@ private struct RepoDisclosure: View {
         Text(run.duration)
           .font(.system(size: 10, design: .monospaced))
           .foregroundStyle(.tertiary)
-        Text(run.timeAgo)
+        RelativeTimeText(date: run.updatedAt)
           .font(.system(size: 10))
           .foregroundStyle(.quaternary)
       }
@@ -146,21 +151,6 @@ private struct RepoDisclosure: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .onHover { hovering in
-      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-    }
-  }
-
-  private func worstStatus(_ statuses: [RunStatus]) -> RunStatus {
-    if statuses.contains(where: { $0 == .failure }) { return .failure }
-    if statuses.contains(where: { $0 == .inProgress }) { return .inProgress }
-    if statuses.contains(where: { $0 == .queued }) { return .queued }
-    if statuses.allSatisfy({ $0 == .success }) { return .success }
-    return .unknown
-  }
-
-  private func openURL(_ url: URL?) {
-    guard let url else { return }
-    NSWorkspace.shared.open(url)
+    .pointingHandCursor()
   }
 }

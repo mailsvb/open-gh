@@ -13,7 +13,7 @@ A lightweight macOS menu bar app that shows your GitHub Actions and Pull Request
   - Active repo fetches more run history automatically
 - **PRs tab** — your open pull requests with CI status and review state
 - **Org switcher** — dropdown to switch between orgs and personal repos
-- **Smart polling** — only refreshes while the popover is open (every 15s)
+- **Smart polling** — only refreshes while the popover is open (every 30s by default)
 - **Click to open** — any run or PR opens directly in your browser
 - **Configurable** — edit `~/.ghbar/config.json` to customize everything
 
@@ -32,8 +32,8 @@ gh auth login
 ## Install
 
 ```bash
-git clone https://github.com/XavierJp/ghbar.git
-cd ghbar
+git clone https://github.com/mailsvb/open-gh.git
+cd open-gh
 ./install.sh
 ```
 
@@ -57,14 +57,14 @@ launchctl unload ~/Library/LaunchAgents/com.ghbar.app.plist && launchctl load ~/
 
 ## Configuration
 
-Config lives at `~/.ghbar/config.json`. Created automatically on first run.
+Config lives at `~/.ghbar/config.json`. Created automatically on first run. Missing keys fall back to the defaults below; if the file can't be parsed it is left untouched and the error is shown in the popover.
 
 ```json
 {
   "orgs": ["my-org"],
   "includePersonal": true,
   "username": "my-github-username",
-  "pollingIntervalSeconds": 15,
+  "pollingIntervalSeconds": 30,
   "maxReposPerOrg": 25,
   "runsPerRepo": 8,
   "activeRepoRunsLimit": 25,
@@ -76,8 +76,8 @@ Config lives at `~/.ghbar/config.json`. Created automatically on first run.
 |-----|-------------|---------|
 | `orgs` | GitHub organizations to monitor | `[]` |
 | `includePersonal` | Include your personal repos as a source | `true` |
-| `username` | Your GitHub username (for personal repos) | `""` |
-| `pollingIntervalSeconds` | Refresh interval when popover is open | `15` |
+| `username` | Your GitHub username (for personal repos). Leave empty to use the `gh` login | `""` |
+| `pollingIntervalSeconds` | Refresh interval when popover is open (min 5) | `30` |
 | `maxReposPerOrg` | Max repos to scan per org | `25` |
 | `runsPerRepo` | Workflow runs to fetch per repo | `8` |
 | `activeRepoRunsLimit` | Extra runs fetched for the most active repo | `25` |
@@ -96,6 +96,11 @@ swift build -c release
 ## How it works
 
 GHBar shells out to the `gh` CLI to fetch data from GitHub. No tokens or OAuth needed beyond your existing `gh auth` session. Fetches are parallelized and throttled to stay within API limits.
+
+- **Actions**: lists the source's repos, then fetches recent runs per repo.
+- **PRs**: one `gh search prs --author @me` call finds the repos where you have open PRs, then only those repos are queried for CI and review status.
+
+Errors from `gh` (not installed, not logged in, rate limited) are shown in a banner at the top of the popover.
 
 ## License
 

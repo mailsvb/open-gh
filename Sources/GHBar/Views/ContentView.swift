@@ -17,16 +17,19 @@ struct ContentView: View {
 
         Spacer()
 
-        Picker("", selection: $appState.selectedSource) {
-          ForEach(appState.availableSources) { source in
-            Text(source.displayName).tag(source)
+        if !appState.availableSources.isEmpty {
+          // Custom binding so only user picks trigger a source switch
+          Picker("", selection: Binding(
+            get: { appState.selectedSource },
+            set: { appState.switchSource($0) }
+          )) {
+            ForEach(appState.availableSources) { source in
+              Text(source.displayName).tag(Optional(source))
+            }
           }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(maxWidth: 160)
-        .onChange(of: appState.selectedSource) { _, newValue in
-          appState.switchSource(newValue)
+          .labelsHidden()
+          .pickerStyle(.menu)
+          .frame(maxWidth: 160)
         }
 
         if appState.isLoading {
@@ -34,7 +37,7 @@ struct ContentView: View {
             .controlSize(.small)
         }
 
-        Button(action: { Task { await appState.refresh() } }) {
+        Button(action: { appState.requestRefresh() }) {
           Image(systemName: "arrow.clockwise")
             .font(.system(size: 11))
         }
@@ -45,6 +48,11 @@ struct ContentView: View {
       .padding(.vertical, 8)
 
       Divider()
+
+      if let error = appState.lastError {
+        errorBanner(error)
+        Divider()
+      }
 
       // Content
       switch appState.selectedTab {
@@ -71,5 +79,22 @@ struct ContentView: View {
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
     }
+  }
+
+  private func errorBanner(_ message: String) -> some View {
+    HStack(alignment: .top, spacing: 6) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .font(.system(size: 11))
+        .foregroundColor(.orange)
+      Text(message)
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+        .lineLimit(4)
+        .textSelection(.enabled)
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 6)
+    .background(Color.orange.opacity(0.08))
   }
 }
