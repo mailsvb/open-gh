@@ -146,7 +146,11 @@ enum GitHubService {
       process.arguments = ghExecutable.leadingArgs + arguments
       process.standardOutput = stdout
       process.standardError = stderr
-      process.environment = ProcessInfo.processInfo.environment
+      // Apps launched from Finder or as a login item get a minimal PATH
+      var environment = ProcessInfo.processInfo.environment
+      environment["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] + [environment["PATH"] ?? "/usr/bin:/bin"])
+        .joined(separator: ":")
+      process.environment = environment
 
       let group = DispatchGroup()
       group.enter()

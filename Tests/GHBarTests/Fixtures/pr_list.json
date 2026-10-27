@@ -1,0 +1,47 @@
+[
+  {
+    "number": 101,
+    "title": "Green PR with skipped checks",
+    "url": "https://github.com/acme/app/pull/101",
+    "headRefName": "feature/green",
+    "reviewDecision": "APPROVED",
+    "updatedAt": "2026-10-27T10:00:00Z",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "build", "status": "COMPLETED", "conclusion": "SUCCESS", "workflowName": "CI"},
+      {"__typename": "CheckRun", "name": "deploy-preview", "status": "COMPLETED", "conclusion": "SKIPPED", "workflowName": "CI"}
+    ]
+  },
+  {
+    "number": 102,
+    "title": "External CI via commit statuses",
+    "url": "https://github.com/acme/app/pull/102",
+    "headRefName": "feature/statuses",
+    "reviewDecision": "REVIEW_REQUIRED",
+    "updatedAt": "2026-10-27T11:00:00Z",
+    "statusCheckRollup": [
+      {"__typename": "StatusContext", "context": "ci/jenkins", "state": "PENDING", "targetUrl": "https://ci.example.com/1"},
+      {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "SUCCESS"}
+    ]
+  },
+  {
+    "number": 103,
+    "title": "Timed out",
+    "url": "https://github.com/acme/app/pull/103",
+    "headRefName": "fix/slow",
+    "reviewDecision": "",
+    "updatedAt": "2026-10-27T12:00:00Z",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "e2e", "status": "COMPLETED", "conclusion": "TIMED_OUT"},
+      {"__typename": "CheckRun", "name": "unit", "status": "IN_PROGRESS", "conclusion": ""}
+    ]
+  },
+  {
+    "number": 104,
+    "title": "No checks",
+    "url": "https://github.com/acme/app/pull/104",
+    "headRefName": "docs",
+    "reviewDecision": "CHANGES_REQUESTED",
+    "updatedAt": "2026-10-27T13:00:00Z",
+    "statusCheckRollup": []
+  }
+]

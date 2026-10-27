@@ -71,6 +71,21 @@ struct ContentView: View {
             .foregroundStyle(.secondary)
         }
         Spacer()
+        if LoginItem.isAvailable {
+          Toggle("Open at login", isOn: Binding(
+            get: { appState.launchAtLogin },
+            set: { appState.setLaunchAtLogin($0) }
+          ))
+          .toggleStyle(.checkbox)
+          .controlSize(.mini)
+          .font(.system(size: 10))
+          .foregroundStyle(.secondary)
+        }
+        Button("Config") { appState.openConfigFile() }
+          .buttonStyle(.plain)
+          .font(.system(size: 10))
+          .foregroundStyle(.secondary)
+          .help("Open ~/.ghbar/config.json (changes apply on the next refresh)")
         Button("Quit") { NSApp.terminate(nil) }
           .buttonStyle(.plain)
           .font(.system(size: 10))

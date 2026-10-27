@@ -5,6 +5,7 @@ struct AppConfig: Codable, Sendable {
   var includePersonal: Bool
   var username: String          // empty → resolved from `gh api user` at runtime
   var pollingIntervalSeconds: Int
+  var backgroundPollingMinutes: Int // while the popover is closed; 0 disables
   var maxReposPerOrg: Int
   var runsPerRepo: Int
   var activeRepoRunsLimit: Int
@@ -15,6 +16,7 @@ struct AppConfig: Codable, Sendable {
     includePersonal: true,
     username: "",
     pollingIntervalSeconds: 30,
+    backgroundPollingMinutes: 5,
     maxReposPerOrg: 25,
     runsPerRepo: 8,
     activeRepoRunsLimit: 25,
@@ -23,6 +25,10 @@ struct AppConfig: Codable, Sendable {
 
   static let configDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".ghbar")
   static let configFile = configDir.appendingPathComponent("config.json")
+
+  static func modificationDate() -> Date? {
+    (try? FileManager.default.attributesOfItem(atPath: configFile.path))?[.modificationDate] as? Date
+  }
 
   /// Loads the config, writing a default file only when none exists.
   /// A file that fails to parse is left untouched and its error returned.
@@ -69,6 +75,7 @@ extension AppConfig {
     includePersonal = try c.decodeIfPresent(Bool.self, forKey: .includePersonal) ?? d.includePersonal
     username = try c.decodeIfPresent(String.self, forKey: .username) ?? d.username
     pollingIntervalSeconds = max(5, try c.decodeIfPresent(Int.self, forKey: .pollingIntervalSeconds) ?? d.pollingIntervalSeconds)
+    backgroundPollingMinutes = max(0, try c.decodeIfPresent(Int.self, forKey: .backgroundPollingMinutes) ?? d.backgroundPollingMinutes)
     maxReposPerOrg = max(1, try c.decodeIfPresent(Int.self, forKey: .maxReposPerOrg) ?? d.maxReposPerOrg)
     runsPerRepo = max(1, try c.decodeIfPresent(Int.self, forKey: .runsPerRepo) ?? d.runsPerRepo)
     activeRepoRunsLimit = try c.decodeIfPresent(Int.self, forKey: .activeRepoRunsLimit) ?? d.activeRepoRunsLimit

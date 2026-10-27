@@ -1,49 +1,34 @@
 #!/bin/bash
-set -e
+set -euo pipefail
+cd "$(dirname "$0")"
 
-INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="ghbar"
-PLIST_NAME="com.ghbar.app"
-PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+APP_PATH="$HOME/Applications/GHBar.app"
+LEGACY_PLIST="$HOME/Library/LaunchAgents/com.ghbar.app.plist"
+LEGACY_BINARY="/usr/local/bin/ghbar"
 
-echo "Building GHBar..."
-swift build -c release --quiet
+echo "Building GHBar.app..."
+./scripts/bundle.sh >/dev/null
 
-echo "Installing to $INSTALL_DIR/$BINARY_NAME..."
-sudo mkdir -p "$INSTALL_DIR"
-sudo cp -f .build/release/GHBar "$INSTALL_DIR/$BINARY_NAME"
+# Migrate from the old LaunchAgent + /usr/local/bin install
+if [ -f "$LEGACY_PLIST" ]; then
+  launchctl bootout "gui/$(id -u)" "$LEGACY_PLIST" 2>/dev/null || launchctl unload "$LEGACY_PLIST" 2>/dev/null || true
+  rm -f "$LEGACY_PLIST"
+  echo "Removed legacy Launch Agent."
+fi
+if [ -f "$LEGACY_BINARY" ]; then
+  echo "Removing legacy binary $LEGACY_BINARY (needs sudo)..."
+  sudo rm -f "$LEGACY_BINARY"
+fi
 
-# Install Launch Agent (start on login)
-mkdir -p "$HOME/Library/LaunchAgents"
-cat > "$PLIST_PATH" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$PLIST_NAME</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$INSTALL_DIR/$BINARY_NAME</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <false/>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-</dict>
-</plist>
-EOF
+# Replace any running copy
+pkill -x GHBar 2>/dev/null || true
+pkill -x ghbar 2>/dev/null || true
 
-# Load the agent (starts it now + on future logins)
-launchctl unload "$PLIST_PATH" 2>/dev/null || true
-launchctl load "$PLIST_PATH"
+echo "Installing to $APP_PATH..."
+mkdir -p "$(dirname "$APP_PATH")"
+rm -rf "$APP_PATH"
+cp -R .build/GHBar.app "$APP_PATH"
+open "$APP_PATH"
 
-echo "Done. GHBar is running and will start automatically on login."
+echo "Done. GHBar is running and will open at login (toggle it in the popover footer)."
 echo "  Config:  ~/.ghbar/config.json (created on first run)"
-echo "  Stop:    launchctl unload $PLIST_PATH"
-echo "  Restart: launchctl unload $PLIST_PATH && launchctl load $PLIST_PATH"

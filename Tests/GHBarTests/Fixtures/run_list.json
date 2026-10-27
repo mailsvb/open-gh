@@ -1,0 +1,8 @@
+[
+  {"databaseId": 1, "workflowName": "CI", "status": "completed", "conclusion": "success", "headBranch": "main",
+   "startedAt": "2026-10-27T10:00:00Z", "updatedAt": "2026-10-27T10:02:00Z", "url": "https://github.com/acme/app/actions/runs/1"},
+  {"databaseId": 2, "workflowName": "CI", "status": "completed", "conclusion": "timed_out", "headBranch": "main",
+   "startedAt": "2026-10-27T09:00:00Z", "updatedAt": "2026-10-27T09:06:00Z", "url": "https://github.com/acme/app/actions/runs/2"},
+  {"databaseId": 3, "workflowName": "CI", "status": "in_progress", "conclusion": "", "headBranch": "feature",
+   "startedAt": "2026-10-27T11:00:00Z", "updatedAt": "2026-10-27T11:01:00Z", "url": "https://github.com/acme/app/actions/runs/3"}
+]

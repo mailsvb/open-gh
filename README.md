@@ -2,25 +2,26 @@
 
 A lightweight macOS menu bar app that shows your GitHub Actions and Pull Requests at a glance. Built with Swift and SwiftUI, powered by the `gh` CLI.
 
-![macOS](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift](https://img.shields.io/badge/Swift-5.10-orange)
+![macOS](https://img.shields.io/badge/macOS-14%2B-blue) ![Swift](https://img.shields.io/badge/Swift-6-orange) [![CI](https://github.com/mailsvb/open-gh/actions/workflows/ci.yml/badge.svg)](https://github.com/mailsvb/open-gh/actions/workflows/ci.yml)
 
 ## Features
 
-- **Menu bar icon** — always visible, one click to open
+- **Menu bar icon** — always visible, one click to open; shows a red dot when the latest run of a workflow (or your PR's CI) failed, orange while something is running
 - **Actions tab** — workflow runs organized by repo, grouped by workflow name
   - Per-workflow stats: success rate, average duration, failure count
   - Most recently active repo auto-expanded
   - Active repo fetches more run history automatically
 - **PRs tab** — your open pull requests with CI status and review state
 - **Org switcher** — dropdown to switch between orgs and personal repos
-- **Smart polling** — only refreshes while the popover is open (every 30s by default)
+- **Smart polling** — every 30s while the popover is open, every 5 min in the background (for the status dot)
 - **Click to open** — any run or PR opens directly in your browser
-- **Configurable** — edit `~/.ghbar/config.json` to customize everything
+- **Configurable** — click **Config** in the footer to edit `~/.ghbar/config.json`; changes apply on the next refresh, no restart needed
+- **Open at login** — toggle in the footer
 
 ## Prerequisites
 
 - macOS 14+
-- Swift 5.10+ (comes with Xcode or Command Line Tools)
+- Swift 6.0+ (Xcode 16 or later)
 - [GitHub CLI](https://cli.github.com/) (`gh`) installed and authenticated
 
 ```bash
@@ -37,17 +38,11 @@ cd open-gh
 ./install.sh
 ```
 
-This builds a release binary, copies it to `/usr/local/bin/ghbar`, and installs a Launch Agent so GHBar starts automatically on login.
+This builds `GHBar.app`, installs it to `~/Applications` (no `sudo` needed), and launches it. On first launch it registers itself to open at login; turn that off with the **Open at login** checkbox in the popover footer.
 
-Manual controls:
+Upgrading from an older version? `install.sh` also removes the old Launch Agent and `/usr/local/bin/ghbar`.
 
-```bash
-# Stop
-launchctl unload ~/Library/LaunchAgents/com.ghbar.app.plist
-
-# Restart
-launchctl unload ~/Library/LaunchAgents/com.ghbar.app.plist && launchctl load ~/Library/LaunchAgents/com.ghbar.app.plist
-```
+To stop GHBar, click **Quit** in the popover. To start it again, open `~/Applications/GHBar.app`.
 
 ## Uninstall
 
@@ -65,6 +60,7 @@ Config lives at `~/.ghbar/config.json`. Created automatically on first run. Miss
   "includePersonal": true,
   "username": "my-github-username",
   "pollingIntervalSeconds": 30,
+  "backgroundPollingMinutes": 5,
   "maxReposPerOrg": 25,
   "runsPerRepo": 8,
   "activeRepoRunsLimit": 25,
@@ -78,6 +74,7 @@ Config lives at `~/.ghbar/config.json`. Created automatically on first run. Miss
 | `includePersonal` | Include your personal repos as a source | `true` |
 | `username` | Your GitHub username (for personal repos). Leave empty to use the `gh` login | `""` |
 | `pollingIntervalSeconds` | Refresh interval when popover is open (min 5) | `30` |
+| `backgroundPollingMinutes` | Refresh interval while the popover is closed, for the status dot. `0` disables it | `5` |
 | `maxReposPerOrg` | Max repos to scan per org | `25` |
 | `runsPerRepo` | Workflow runs to fetch per repo | `8` |
 | `activeRepoRunsLimit` | Extra runs fetched for the most active repo | `25` |
@@ -89,9 +86,14 @@ Config lives at `~/.ghbar/config.json`. Created automatically on first run. Miss
 # Build and run (debug)
 swift build && .build/debug/GHBar
 
-# Build release
-swift build -c release
+# Run tests
+swift test
+
+# Build GHBar.app into .build/
+./scripts/bundle.sh
 ```
+
+Open-at-login only works when running from the bundled `.app`; the bare debug binary hides that option. CI builds, tests and bundles the app on every push and pull request.
 
 ## How it works
 

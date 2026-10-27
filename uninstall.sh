@@ -1,21 +1,30 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-INSTALL_DIR="/usr/local/bin"
+APP_PATH="$HOME/Applications/GHBar.app"
 CONFIG_DIR="$HOME/.ghbar"
-BINARY_NAME="ghbar"
-PLIST_NAME="com.ghbar.app"
-PLIST_PATH="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
+LEGACY_PLIST="$HOME/Library/LaunchAgents/com.ghbar.app.plist"
+LEGACY_BINARY="/usr/local/bin/ghbar"
 
-# Stop and remove Launch Agent
-if [ -f "$PLIST_PATH" ]; then
-  launchctl unload "$PLIST_PATH" 2>/dev/null || true
-  rm -f "$PLIST_PATH"
-  echo "Launch Agent removed."
+pkill -x GHBar 2>/dev/null || true
+
+if [ -d "$APP_PATH" ]; then
+  # Remove the login item while the app still exists to do it
+  "$APP_PATH/Contents/MacOS/GHBar" --unregister-login-item || true
+  rm -rf "$APP_PATH"
+  echo "Removed $APP_PATH."
 fi
 
-echo "Removing $INSTALL_DIR/$BINARY_NAME..."
-sudo rm -f "$INSTALL_DIR/$BINARY_NAME"
+# Leftovers from the old LaunchAgent-based install
+if [ -f "$LEGACY_PLIST" ]; then
+  launchctl bootout "gui/$(id -u)" "$LEGACY_PLIST" 2>/dev/null || launchctl unload "$LEGACY_PLIST" 2>/dev/null || true
+  rm -f "$LEGACY_PLIST"
+  echo "Legacy Launch Agent removed."
+fi
+if [ -f "$LEGACY_BINARY" ]; then
+  echo "Removing $LEGACY_BINARY (needs sudo)..."
+  sudo rm -f "$LEGACY_BINARY"
+fi
 
 read -p "Remove config at $CONFIG_DIR? [y/N] " -n 1 -r
 echo

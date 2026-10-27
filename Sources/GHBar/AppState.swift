@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -12,6 +13,9 @@ final class AppState: ObservableObject {
   @Published var lastError: String?
   @Published var selectedTab: Tab = .actions
   @Published var mostRecentRepoId: String?
+  /// Worst of the latest run per workflow and your PRs' CI; drives the menu bar dot.
+  @Published private(set) var overallStatus: RunStatus = .unknown
+  @Published private(set) var launchAtLogin = LoginItem.isEnabled
 
   enum Tab: String, CaseIterable {
     case actions = "Actions"
@@ -20,7 +24,10 @@ final class AppState: ObservableObject {
 
   private var timer: Timer?
   private(set) var isPopoverVisible = false
-  private let configError: String?
+  private var configError: String?
+  private var configModified: Date?
+  /// Login from `gh api user`, kept across config reloads when `username` is empty.
+  private var resolvedUsername: String?
 
   /// Only one refresh is in flight. Each new one cancels the previous and bumps the
   /// generation, so a slower, older refresh can never overwrite newer results.
@@ -28,38 +35,104 @@ final class AppState: ObservableObject {
   private var refreshGeneration = 0
 
   init() {
-    let (cfg, error) = AppConfig.load()
-    self.config = cfg
-    self.configError = error
-    self.lastError = error
-    self.selectedSource = cfg.allSources.first
+    self.config = .default
+    loadConfig()
+  }
+
+  /// Called once at launch: starts background polling so the menu bar dot is live.
+  func start() {
+    schedulePolling()
+    if config.backgroundPollingMinutes > 0 { requestRefresh() }
+  }
+
+  // MARK: - Config
+
+  func reloadConfigIfChanged() {
+    guard AppConfig.modificationDate() != configModified else { return }
+    loadConfig()
+    schedulePolling()
+  }
+
+  private func loadConfig() {
+    var (cfg, error) = AppConfig.load()
+    configModified = AppConfig.modificationDate()
+    if cfg.username.isEmpty, let resolvedUsername { cfg.username = resolvedUsername }
+    config = cfg
+    configError = error
+    lastError = error
+
+    if let current = selectedSource, cfg.allSources.contains(current) { return }
+    selectedSource = cfg.allSources.first
+    clearData()
+  }
+
+  func openConfigFile() {
+    let url = AppConfig.configFile
+    if !FileManager.default.fileExists(atPath: url.path) { AppConfig.default.save() }
+    // .json may have no default app; fall back to TextEdit
+    if NSWorkspace.shared.urlForApplication(toOpen: url) != nil {
+      NSWorkspace.shared.open(url)
+    } else {
+      NSWorkspace.shared.open(
+        [url],
+        withApplicationAt: URL(fileURLWithPath: "/System/Applications/TextEdit.app"),
+        configuration: NSWorkspace.OpenConfiguration()
+      )
+    }
+  }
+
+  func setLaunchAtLogin(_ enabled: Bool) {
+    do {
+      try LoginItem.setEnabled(enabled)
+    } catch {
+      lastError = "Could not change open-at-login: \(error.localizedDescription)"
+    }
+    launchAtLogin = LoginItem.isEnabled
   }
 
   var availableSources: [OrgSource] {
     config.allSources
   }
 
+  // MARK: - Polling
+
   func popoverOpened() {
     isPopoverVisible = true
+    launchAtLogin = LoginItem.isEnabled
+    reloadConfigIfChanged()
     requestRefresh()
-    startPolling()
+    schedulePolling()
   }
 
   func popoverClosed() {
     isPopoverVisible = false
-    stopPolling()
-    cancelRefresh()
+    // Let an in-flight refresh finish if it will feed the menu bar dot
+    if config.backgroundPollingMinutes == 0 { cancelRefresh() }
+    schedulePolling()
   }
 
-  private func startPolling() {
+  /// Fast polling while the popover is open, slow (or none) while it is closed.
+  private func schedulePolling() {
     stopPolling()
-    timer = Timer.scheduledTimer(withTimeInterval: TimeInterval(config.pollingIntervalSeconds), repeats: true) { [weak self] _ in
+    let interval: TimeInterval
+    if isPopoverVisible {
+      interval = TimeInterval(config.pollingIntervalSeconds)
+    } else if config.backgroundPollingMinutes > 0 {
+      interval = TimeInterval(config.backgroundPollingMinutes * 60)
+    } else {
+      return
+    }
+    let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
       Task { @MainActor in
         // Skip the tick rather than pile up behind a slow refresh
         guard let self, !self.isLoading else { return }
+        self.reloadConfigIfChanged()
         self.requestRefresh()
       }
     }
+    // .common so ticks still fire while a menu (e.g. the org picker) is open
+    RunLoop.main.add(timer, forMode: .common)
+    self.timer = timer
   }
 
   private func stopPolling() {
@@ -70,10 +143,15 @@ final class AppState: ObservableObject {
   func switchSource(_ source: OrgSource?) {
     guard source != selectedSource else { return }
     selectedSource = source
+    clearData()
+    requestRefresh()
+  }
+
+  private func clearData() {
     repoGroups = []
     pullRequests = [:]
     mostRecentRepoId = nil
-    requestRefresh()
+    overallStatus = .unknown
   }
 
   func requestRefresh() {
@@ -107,6 +185,7 @@ final class AppState: ObservableObject {
     if config.includePersonal && config.username.isEmpty {
       if let login = try? await GitHubService.currentUsername(), !login.isEmpty {
         guard isCurrent(generation) else { return }
+        resolvedUsername = login
         config.username = login
       }
     }
@@ -187,6 +266,12 @@ final class AppState: ObservableObject {
       }
     }
     self.pullRequests = prsByRepo
+
+    let latestRuns = repoGroups.flatMap(\.workflows).compactMap { workflow in
+      workflow.runs.max { $0.updatedAt < $1.updatedAt }?.status
+    }
+    let prChecks = prsByRepo.values.joined().map(\.checksStatus)
+    overallStatus = combinedStatus(latestRuns + prChecks)
   }
 
   /// Config problems stay visible alongside any fetch error.
