@@ -6,7 +6,7 @@ struct GHError: LocalizedError {
 }
 
 /// Results keyed by "owner/repo", plus the first error hit while fetching them.
-struct SourceData<Value> {
+struct SourceData<Value: Sendable>: Sendable {
   var byRepo: [String: [Value]] = [:]
   var error: Error?
 }
